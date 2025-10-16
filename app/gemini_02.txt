@@ -1,0 +1,84 @@
+Análisis del Funcionamiento del Código Fuente
+El código implementa un sistema embebido "bare-metal" (sin sistema operativo) que sigue un modelo de planificación cooperativa basado en tiempo. La lógica principal se encuentra en un bucle infinito que ejecuta secuencialmente un conjunto de tareas a intervalos regulares, controlados por la interrupción del temporizador SysTick.
+
+app.c: El Planificador de Tareas 📋
+Este archivo es el núcleo del sistema y actúa como un planificador simple.
+
+app_init(): Se ejecuta una sola vez al inicio para configurar la aplicación. Llama a las funciones de inicialización de cada tarea (task_sensor_init, task_menu_init) y prepara los contadores de tiempo.
+
+app_update(): Es el corazón del sistema, llamado continuamente desde main(). Su lógica principal es:
+
+Espera a que la interrupción del SysTick incremente la variable g_app_tick_cnt, indicando que ha pasado 1 milisegundo.
+
+Ejecuta la función update de cada tarea registrada en la lista task_cfg_list (task_sensor_update y task_menu_update).
+
+Mide el tiempo de ejecución de cada tarea en microsegundos utilizando el contador de ciclos del procesador (DWT).
+
+Acumula el tiempo de todas las tareas en g_app_runtime_us y actualiza el Peor Tiempo de Ejecución (WCET) de cada tarea si el tiempo actual es mayor que el máximo registrado.
+
+HAL_SYSTICK_Callback(): Es la rutina de servicio de interrupción del SysTick. Se ejecuta cada milisegundo e incrementa los contadores de "ticks" (g_app_tick_cnt, g_task_sensor_tick_cnt, g_task_menu_tick_cnt), que actúan como el "pulso" que sincroniza todo el sistema.
+
+task_sensor.c: Gestión de Botones 🔘
+Esta tarea se encarga de leer el estado de los botones, aplicarles un filtro antirrebote (debouncing) y notificar a otras partes del sistema sobre los eventos.
+
+Funcionamiento: Utiliza una máquina de estados finitos (FSM) para cada botón, con los estados UP (liberado), FALLING (transición a presionado), DOWN (presionado) y RISING (transición a liberado).
+
+Filtro Antirrebote: Para evitar lecturas falsas por rebotes mecánicos, un botón debe permanecer en un estado estable durante un número definido de ticks (tick_max, que es 50 ms) antes de que el cambio sea validado.
+
+Comunicación: Cuando se confirma una pulsación (ST_BTN_XX_DOWN) o una liberación (ST_BTN_XX_UP), la tarea envía un evento a la task_menu utilizando la función put_event_task_menu(). Esto desacopla las tareas, permitiendo una comunicación asíncrona.
+
+task_menu.c: Interfaz de Usuario en LCD 📺
+Esta tarea gestiona la lógica de la interfaz de usuario, mostrando información en una pantalla LCD y reaccionando a los eventos generados por task_sensor.
+
+Funcionamiento: También se basa en una FSM con dos estados principales: ST_MEN_XX_IDLE (en reposo) y ST_MEN_XX_ACTIVE (activo).
+
+Reacción a Eventos: La tarea comprueba si hay eventos pendientes en una cola (any_event_task_menu()). Si recibe un evento de "Enter presionado" (EV_MEN_ENT_ACTIVE), pasa al estado activo.
+
+Actualización Periódica: En el estado ST_MEN_XX_ACTIVE, la tarea actualiza un contador numérico en la pantalla LCD cada 500 milisegundos (DEL_MEN_XX_MAX).
+
+logger.c y logger.h: Sistema de Registro ✍️
+Estos archivos proporcionan una funcionalidad simple para enviar mensajes de depuración a través de la interfaz de "semihosting", que permite al microcontrolador enviar datos a la consola del depurador en el PC.
+
+LOGGER_INFO(): Es una macro que formatea un mensaje y lo envía usando printf.
+
+Funcionamiento Crítico: La función logger_log_print_ utiliza printf y fflush(stdout). En un entorno de semihosting, esta es una operación muy lenta y bloqueante, ya que requiere comunicación con el depurador.
+
+Protección: La macro LOGGER_LOG deshabilita las interrupciones (CPSID i) antes de imprimir y las rehabilita después (CPSIE i). Esto asegura que la operación de log no sea interrumpida, pero también significa que el sistema entero se congela durante la transmisión del mensaje.
+
+Impacto de LOGGER_INFO() en el Rendimiento
+El uso de LOGGER_INFO() tiene un impacto significativo y negativo en el rendimiento en tiempo real del sistema debido a la naturaleza lenta del semihosting.
+
+g_task_test_tick_cnt
+Primero, es importante aclarar que la variable g_task_test_tick_cnt no existe en el código fuente proporcionado. Las variables que controlan la ejecución de las tareas son g_task_sensor_tick_cnt y g_task_menu_tick_cnt.
+
+Unidad de medida: Ticks. Cada tick equivale a 1 milisegundo (ms), ya que son incrementados por la interrupción del SysTick.
+
+Impacto: El uso de LOGGER_INFO() no afecta directamente la frecuencia con la que estos contadores se incrementan (la interrupción del SysTick seguirá ocurriendo cada 1 ms). Sin embargo, si una tarea tarda más de 1 ms en ejecutarse debido al logging, las tareas comenzarán a "perder ticks", lo que significa que no podrán procesar cada milisegundo a tiempo, causando un comportamiento errático.
+
+g_app_runtime_us
+Unidad de medida: Microsegundos (µs).
+
+Evolución Normal: Sin logging, esta variable mide el tiempo total que tardan todas las tareas en ejecutarse en un ciclo de 1 ms. Su valor suele ser bajo (decenas o cientos de microsegundos) y se resetea a cero al inicio de cada ciclo en app_update.
+
+Impacto de LOGGER_INFO():
+
+Cuando una tarea llama a LOGGER_INFO(), su tiempo de ejecución se dispara, pudiendo tardar varios milisegundos.
+
+Este tiempo tan largo se suma a g_app_runtime_us.
+
+Como resultado, en los ciclos donde se ejecuta un LOGGER_INFO(), el valor de g_app_runtime_us se incrementará drásticamente, reflejando el alto costo de la operación de E/S del semihosting.
+
+task_dta_list[index].WCET (Worst-Case Execution Time)
+Unidad de medida: Microsegundos (µs).
+
+Evolución Normal: Esta variable actúa como un "récord" del tiempo más largo que ha tardado una tarea en ejecutarse. Se inicializa en cero y solo se actualiza si el tiempo de ejecución actual supera el máximo anterior.
+
+Impacto de LOGGER_INFO():
+
+La primera vez que una tarea llame a LOGGER_INFO(), su tiempo de ejecución medido será muy alto.
+
+El planificador en app_update detectará este pico y actualizará el WCET de esa tarea a este nuevo valor máximo.
+
+A diferencia de g_app_runtime_us que se resetea en cada ciclo, el valor de WCET, una vez actualizado, permanecerá alto para siempre. Esto proporciona una indicación clara de que la tarea tuvo un pico de ejecución, aunque puede ser engañoso si el logging solo se usa para depuración y no forma parte de la lógica final.
+
+En resumen, aunque LOGGER_INFO() es una herramienta de depuración invaluable, introduce una sobrecarga de tiempo masiva que distorsiona las métricas de rendimiento en tiempo real. Para medir el rendimiento real del sistema, todas las llamadas de logging deberían estar deshabilitadas.

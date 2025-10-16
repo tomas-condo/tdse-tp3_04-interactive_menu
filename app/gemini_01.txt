@@ -1,0 +1,190 @@
+Resumen General del Proyecto
+El código implementa un sistema embebido para una placa STM32 que gestiona la interacción con el usuario a través de botones y muestra información en una pantalla LCD. La arquitectura es de tipo "bare-metal" (sin un sistema operativo en tiempo real) y utiliza un planificador cooperativo simple basado en eventos y tiempo.
+
+El sistema se divide en dos tareas principales:
+
+task_sensor: Se encarga de leer el estado de tres botones, aplicar un filtro antirrebote (debouncing) y generar eventos según las acciones del usuario (pulsar/soltar).
+
+task_menu: Gestiona una interfaz de usuario simple en una pantalla LCD. Reacciona a los eventos generados por task_sensor y actualiza la pantalla periódicamente.
+
+El flujo general es el siguiente: el main inicializa el hardware y las tareas, y luego entra en un bucle infinito donde invoca a un planificador (app_update). Este planificador ejecuta las tareas a intervalos regulares, controlados por la interrupción del SysTick (que ocurre cada 1 ms). Las tareas se comunican entre sí de forma asíncrona mediante una cola de eventos.
+
+Análisis Detallado por Archivo
+A continuación, se describe la función de cada archivo en el proyecto.
+
+main.c
+Este es el punto de entrada de la aplicación.
+
+Función main():
+
+Inicializa el hardware del microcontrolador y los periféricos básicos usando las funciones de la capa de abstracción de hardware (HAL) de ST: HAL_Init(), SystemClock_Config(), MX_GPIO_Init(), MX_USART2_UART_Init().
+
+Llama a app_init() una sola vez para configurar e inicializar las tareas de la aplicación.
+
+Entra en un bucle infinito (while (1)).
+
+Dentro del bucle, llama continuamente a app_update(), que actúa como el "corazón" del planificador de tareas.
+
+stm32f1xx_it.c
+Este archivo contiene las rutinas de servicio de interrupción (ISR).
+
+Función SysTick_Handler(): Es la interrupción más importante para la lógica de la aplicación. Se ejecuta periódicamente (por defecto, cada 1 milisegundo).
+
+Llama a HAL_IncTick(), una función estándar de HAL para mantener una base de tiempo.
+
+Llama a HAL_SYSTICK_IRQHandler(). Esta función es una implementación "débil" que puede ser sobreescrita por el usuario. En este proyecto, la implementación real se encuentra en app.c con el nombre HAL_SYSTICK_Callback().
+
+app.c
+Este archivo implementa el planificador de tareas y la lógica principal de la aplicación.
+
+Estructura de tareas: Define una lista de tareas (task_cfg_list) que contiene punteros a las funciones de inicialización (task_init) y actualización (task_update) de cada tarea (task_sensor y task_menu).
+
+Función app_init():
+
+Inicializa los contadores globales y un contador de ciclos para medir tiempos de ejecución.
+
+Recorre la lista de tareas y llama a la función de inicialización de cada una (ej. task_sensor_init(), task_menu_init()).
+
+Inicializa a cero los contadores de "ticks" que controlarán la ejecución de cada tarea.
+
+Función app_update():
+
+Se ejecuta continuamente desde el bucle de main().
+
+Comprueba si ha transcurrido un "tick" de tiempo (si la variable g_app_tick_cnt es mayor que cero). La interrupción del SysTick se encarga de incrementar este contador.
+
+Si ha pasado tiempo, entra en un bucle while que se ejecuta una vez por cada milisegundo transcurrido. Dentro de este bucle:
+
+Recorre la lista de tareas y ejecuta la función task_update de cada una.
+
+Mide el tiempo de ejecución de cada tarea usando un contador de ciclos del procesador (DWT).
+
+Actualiza dos variables clave: g_app_runtime_us (el tiempo total de ejecución de todas las tareas en un ciclo) y task_dta_list[index].WCET (el peor tiempo de ejecución observado para cada tarea).
+
+Función HAL_SYSTICK_Callback(): Es la implementación de la rutina de interrupción del SysTick. Se ejecuta cada milisegundo e incrementa los contadores de ticks globales (g_app_tick_cnt, g_task_sensor_tick_cnt, g_task_menu_tick_cnt), que son los que "despiertan" a las tareas en app_update.
+
+task_sensor.c
+Implementa la lógica para leer y procesar las entradas de los botones.
+
+Funcionamiento: Utiliza una máquina de estados finitos (FSM) para cada botón para implementar un filtro antirrebote (debouncing). Los estados son: UP (no presionado), FALLING (transición a presionado), DOWN (presionado), RISING (transición a no presionado).
+
+Función task_sensor_init(): Inicializa el estado de la máquina de estados para cada botón.
+
+Función task_sensor_update():
+
+Se ejecuta cada milisegundo (consume un g_task_sensor_tick_cnt).
+
+Para cada botón, lee el estado del pin GPIO correspondiente.
+
+Avanza en la máquina de estados según la lectura actual y el estado anterior. Por ejemplo, si el botón está en UP y se detecta una pulsación, pasa a FALLING y espera un tiempo (DEL_BTN_XX_MAX ticks) para confirmar que no es un ruido.
+
+Una vez que se confirma una pulsación (ST_BTN_XX_DOWN) o una liberación (ST_BTN_XX_UP), llama a put_event_task_menu() para enviar el evento correspondiente a la tarea del menú.
+
+task_menu_interface.c y task_menu_attribute.h
+Estos archivos definen la interfaz de comunicación entre task_sensor y task_menu.
+
+task_menu_attribute.h: Define las estructuras de datos, los estados (ST_MEN_XX_IDLE, ST_MEN_XX_ACTIVE) y los eventos (EV_MEN_ENT_ACTIVE, etc.) que utiliza la máquina de estados de task_menu.
+
+task_menu_interface.c: Implementa una cola de eventos FIFO (First-In, First-Out) muy simple.
+
+put_event_task_menu(): Usada por task_sensor para añadir un evento a la cola.
+
+get_event_task_menu(): Usada por task_menu para extraer el siguiente evento de la cola.
+
+any_event_task_menu(): Usada por task_menu para comprobar si hay eventos pendientes.
+
+Este mecanismo desacopla las tareas: task_sensor no necesita saber qué hace task_menu con los eventos, solo los deposita en la cola.
+
+task_menu.c
+Gestiona la lógica de la interfaz de usuario en la pantalla LCD.
+
+Función task_menu_init():
+
+Inicializa la pantalla LCD llamando a displayInit().
+
+Escribe un mensaje de bienvenida estático en la pantalla.
+
+Inicializa la máquina de estados del menú en el estado ST_MEN_XX_IDLE.
+
+Función task_menu_update():
+
+Se ejecuta cada milisegundo (consume un g_task_menu_tick_cnt).
+
+Llama a any_event_task_menu() para ver si hay un nuevo evento (una pulsación de botón).
+
+Máquina de Estados:
+
+ST_MEN_XX_IDLE: Estado de reposo. Si recibe el evento EV_MEN_ENT_ACTIVE (botón "Enter" presionado), cambia al estado ST_MEN_XX_ACTIVE.
+
+ST_MEN_XX_ACTIVE: Estado activo. Cada 500 ms (DEL_MEN_XX_MAX), actualiza un contador en la segunda línea de la pantalla LCD. El valor que muestra es g_task_menu_cnt, que es un contador de las veces que se ha ejecutado el bucle principal de esta tarea. Si recibe el evento EV_MEN_ENT_IDLE (botón "Enter" soltado), vuelve al estado ST_MEN_XX_IDLE.
+
+display.c
+Contiene el controlador (driver) de bajo nivel para una pantalla de caracteres LCD (tipo HD44780) en modo de 4 bits.
+
+Funciones principales:
+
+displayInit(): Realiza la secuencia de inicialización requerida por el LCD.
+
+displayCodeWrite(): Función interna para enviar comandos o datos al LCD.
+
+displayCharPositionWrite(): Mueve el cursor a una posición (fila, columna) específica.
+
+displayStringWrite(): Escribe una cadena de caracteres en la posición actual del cursor.
+
+Evolución de las Variables
+A continuación, se explica cómo evolucionan las variables que mencionaste durante la ejecución del programa.
+
+g_task_test_tick_cnt
+Esta variable no existe en el código fuente proporcionado. Probablemente te refieres a g_task_sensor_tick_cnt y g_task_menu_tick_cnt.
+
+g_task_sensor_tick_cnt y g_task_menu_tick_cnt
+
+Unidad de medida: Ticks. Cada tick representa 1 milisegundo (ms), ya que se incrementan en la interrupción del SysTick.
+
+Evolución:
+
+Inicialización (app_init): Ambas variables se inicializan a 0.
+
+Interrupción (HAL_SYSTICK_Callback): Cada 1 ms, la interrupción del SysTick se dispara y ambas variables se incrementan en 1.
+
+Ejecución de tareas (task_sensor_update, task_menu_update): Cada tarea tiene un bucle while que se ejecuta mientras su contador de ticks sea mayor que cero. Dentro de ese bucle, la tarea decrementa su propio contador en 1.
+
+En resumen, estas variables actúan como un "presupuesto de tiempo". La interrupción les añade 1 ms de tiempo de ejecución cada milisegundo, y las tareas lo consumen. Esto asegura que la lógica de cada tarea se ejecute exactamente una vez por cada milisegundo que pasa.
+
+g_app_runtime_us
+Unidad de medida: Microsegundos (µs).
+
+Evolución:
+
+Inicialización (app_init): No se inicializa explícitamente, por lo que su valor es indefinido al principio.
+
+Ejecución del planificador (app_update): Esta variable mide el tiempo de ejecución total de una pasada completa del planificador.
+
+Al comienzo de cada ciclo del bucle while principal en app_update, g_app_runtime_us se resetea a 0.
+
+Luego, el planificador ejecuta task_sensor_update, mide su tiempo de ejecución en µs y lo suma a g_app_runtime_us.
+
+A continuación, ejecuta task_menu_update, mide su tiempo y también lo suma a g_app_runtime_us.
+
+Al final del bucle for que recorre las tareas, g_app_runtime_us contiene la suma de los tiempos de ejecución de todas las tareas en ese ciclo de 1 ms. Su valor fluctuará ligeramente dependiendo de las operaciones que realicen las tareas en cada momento (por ejemplo, será un poco mayor cuando task_menu tenga que actualizar el LCD).
+
+task_dta_list[index].WCET
+Unidad de medida: Microsegundos (µs).
+
+Evolución:
+
+WCET significa Worst-Case Execution Time (Peor Tiempo de Ejecución). Esta variable almacena el tiempo máximo que ha tardado una tarea en ejecutarse desde que se inició el sistema.
+
+Inicialización (app_init): Para cada tarea, su WCET se inicializa a 0.
+
+Ejecución del planificador (app_update):
+
+Después de que una tarea (por ejemplo, task_sensor_update) se ejecuta, el planificador mide su tiempo de ejecución (cycle_counter_time_us).
+
+Compara este tiempo medido con el valor guardado en task_dta_list[index].WCET.
+
+Si el tiempo medido actual es mayor que el WCET almacenado, el WCET se actualiza con este nuevo valor más alto.
+
+Si el tiempo medido es menor o igual, el WCET no cambia.
+
+En consecuencia, el valor de WCET para cada tarea solo puede aumentar o mantenerse igual a lo largo del tiempo. Nunca disminuye. Esto es muy útil para analizar el rendimiento del sistema y garantizar que el conjunto de tareas nunca excederá el tiempo disponible (en este caso, 1 ms).

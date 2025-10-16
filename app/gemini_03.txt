@@ -1,0 +1,157 @@
+Los tres archivos (board.h, dwt.h y systick.c) forman parte de una capa de bajo nivel (drivers o BSP - Board Support Package) para un microcontrolador STM32, basado en un núcleo ARM Cortex-M. Su propósito es interactuar directamente con el hardware para ofrecer funcionalidades estandarizadas al resto de la aplicación.
+
+board.h: Actúa como una capa de abstracción de hardware (HAL), permitiendo que el código de la aplicación sea portable entre diferentes placas de desarrollo (como Nucleo o Discovery) sin necesidad de modificarlo.
+
+dwt.h: Proporciona funciones para utilizar el contador de ciclos de CPU de la unidad DWT (Data Watchpoint and Trace), lo que permite mediciones de tiempo de muy alta precisión, ideales para la optimización de código.
+
+systick.c: Ofrece una función de retardo (delay) bloqueante en microsegundos, utilizando el temporizador estándar del sistema, SysTick, presente en todos los núcleos Cortex-M.
+
+Análisis de board.h
+Este archivo de cabecera (.h) define una capa de abstracción para los pines de entrada/salida (GPIO) de diferentes placas de desarrollo STM32. Su objetivo principal es estandarizar los nombres de los pines para componentes comunes como botones y LEDs, de modo que el código principal no dependa del hardware específico.
+
+Funcionamiento Detallado
+Selección de la Placa (Board Selection): La línea más importante para la configuración es:
+
+C
+
+#define BOARD (NUCLEO_F103RC)
+Al cambiar el valor de la macro BOARD, se le indica al preprocesador qué conjunto de definiciones de pines debe utilizar. El archivo tiene predefinidos identificadores numéricos para varias placas populares (NUCLEO_F103RC es 0, NUCLEO_F303R8 es 1, etc.).
+
+Compilación Condicional: El archivo utiliza directivas de preprocesador (#if, #endif) para incluir solo el bloque de código correspondiente a la placa seleccionada. Por ejemplo:
+
+C
+
+/* STM32 Nucleo Boards - 64 Pins */
+#if ((BOARD == NUCLEO_F103RC) || (BOARD == NUCLEO_F401RE) || (BOARD == NUCLEO_F446RE))
+
+#define BTN_A_PIN		B1_Pin
+#define BTN_A_PORT		B1_GPIO_Port
+#define BTN_A_PRESSED	GPIO_PIN_RESET
+
+#define LED_A_PIN		LD2_Pin
+#define LED_A_PORT		LD2_GPIO_Port
+#define LED_A_ON		GPIO_PIN_SET
+
+#endif
+Si BOARD se define como NUCLEO_F103RC, solo este bloque será visible para el compilador. El resto de los bloques para otras placas serán ignorados.
+
+Abstracción de Pines y Lógica: Dentro de cada bloque condicional, se definen macros que "traducen" nombres genéricos a nombres específicos del hardware:
+
+BTN_A_PIN y BTN_A_PORT: Mapean un botón genérico 'A' al pin y puerto físico correspondiente en esa placa (por ejemplo, B1_Pin y B1_GPIO_Port). Estos nombres específicos (B1_Pin, etc.) suelen ser generados por herramientas como STM32CubeMX.
+
+LED_A_PIN y LED_A_PORT: Hacen lo mismo para un LED genérico 'A' (por ejemplo, el LD2 en muchas placas Nucleo).
+
+BTN_A_PRESSED y LED_A_ON: Definen la lógica eléctrica. BTN_A_PRESSED se define como GPIO_PIN_RESET (nivel bajo), lo que significa que el botón se considera presionado cuando el pin está en 0V. LED_A_ON se define como GPIO_PIN_SET (nivel alto), lo que significa que el LED se enciende con un 1 lógico (3.3V). Esto es crucial, ya que la lógica puede estar invertida en otras placas.
+
+En resumen, board.h permite escribir código portable como HAL_GPIO_WritePin(LED_A_PORT, LED_A_PIN, LED_A_ON); sin preocuparse de si el LED está en el pin PB5 o PA13, o si se enciende con un nivel alto o bajo.
+
+Análisis de dwt.h
+Este archivo proporciona un conjunto de funciones para controlar el contador de ciclos de la unidad DWT (Data Watchpoint and Trace). La DWT es un periférico de depuración avanzado en los procesadores ARM Cortex-M que, entre otras cosas, incluye un contador de 32 bits (CYCCNT) que se incrementa con cada ciclo de reloj del CPU. Es la herramienta más precisa para medir el tiempo de ejecución de fragmentos de código.
+
+Funcionamiento Detallado
+Las funciones están declaradas como static inline para optimizar el rendimiento. Esto sugiere al compilador que inserte el código de la función directamente en el lugar de la llamada, eliminando la sobrecarga de una llamada a función.
+
+cycle_counter_init(void): Inicializa el contador.
+
+CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;: Habilita el acceso a los registros de la unidad de traza y depuración (DWT y otros). Sin esto, no se puede usar el contador.
+
+DWT->CYCCNT = 0;: Resetea el contador de ciclos a cero.
+
+DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;: Activa el contador para que empiece a contar los ciclos del CPU.
+
+cycle_counter_reset(void): Simplemente resetea el contador de ciclos (DWT->CYCCNT) a cero. Se usa para iniciar una nueva medición.
+
+cycle_counter_enable(void) / cycle_counter_disable(void): Permiten pausar y reanudar el conteo sin resetearlo, activando o desactivando el bit CYCCNTENA en el registro de control DWT->CTRL.
+
+cycle_counter_get(void): Devuelve el valor actual del contador de 32 bits. Este valor es el número de ciclos de CPU transcurridos desde la última inicialización o reseteo.
+
+cycle_counter_get_time_us(void): Convierte el número de ciclos de CPU a tiempo en microsegundos.
+
+La fórmula es: DWT->CYCCNT / (SystemCoreClock / 1000000).
+
+SystemCoreClock es una variable global (definida por el sistema de STM32) que contiene la frecuencia del núcleo del CPU en Hz (ej. 72,000,000 Hz).
+
+SystemCoreClock / 1000000 calcula cuántos ciclos de reloj ocurren en un microsegundo.
+
+Al dividir el total de ciclos contados por los ciclos por microsegundo, se obtiene el tiempo transcurrido en microsegundos.
+
+En resumen, dwt.h es una utilidad de alto rendimiento para perfilar código. Se usaría típicamente así: cycle_counter_reset(), ejecutar la función a medir, y luego llamar a cycle_counter_get_time_us() para ver cuánto tiempo tardó.
+
+Análisis de systick.c
+Este archivo implementa una función de retardo (delay) utilizando el temporizador SysTick. El SysTick es un temporizador de 24 bits que cuenta hacia abajo, presente en todos los microcontroladores ARM Cortex-M. Es comúnmente usado por los sistemas operativos en tiempo real (RTOS) para generar el "tick" del sistema, pero también puede usarse para crear retardos.
+
+Funcionamiento Detallado de systick_delay_us(uint32_t delay_us)
+Esta función crea un retardo bloqueante (o de "espera activa"), lo que significa que el CPU se queda en un bucle sin hacer nada más hasta que el tiempo especificado haya transcurrido.
+
+Cálculo del Objetivo (target):
+
+C
+
+target = delay_us * (SystemCoreClock / 1000000UL);
+Al igual que en dwt.h, se calcula cuántos "ticks" del temporizador SysTick equivalen al delay_us solicitado en microsegundos.
+
+Captura del Valor Inicial (start):
+
+C
+
+start = SysTick->VAL;
+Se guarda el valor actual del contador SysTick. Como es un contador descendente, start es el punto de partida desde el cual se medirá el tiempo transcurrido.
+
+Bucle de Espera (while (1)): El código entra en un bucle infinito que solo se romperá cuando haya transcurrido el tiempo suficiente.
+
+Manejo del Rebose (Wrap-Around): Esta es la parte más importante de la lógica. Como el SysTick cuenta hacia abajo, puede llegar a cero y recargarse con su valor máximo (SysTick->LOAD) dentro del período de retardo. El código maneja esto correctamente:
+
+current = SysTick->VAL;: Se lee el valor actual del contador en cada iteración.
+
+Caso normal (sin rebose): if (current <= start). Si el valor actual es menor o igual que el inicial, el tiempo transcurrido es simplemente start - current.
+
+Caso con rebose (wrap-around): else. Si current es mayor que start, significa que el contador pasó por cero y se recargó. El tiempo transcurrido es la suma de lo que quedaba desde start hasta 0 (start) más lo que ha contado desde la recarga (SysTick->LOAD - current). La fórmula SysTick->LOAD + start - current calcula esto correctamente.
+
+Condición de Salida:
+
+C
+
+if (elapsed >= target)
+{
+    break;
+}
+Cuando el número de ticks transcurridos (elapsed) es igual o mayor que el objetivo (target), el bucle se rompe y la función termina.
+
+En resumen, systick.c proporciona una función de retardo básica y precisa en microsegundos, pero es "bloqueante", por lo que no es ideal para aplicaciones que necesiten realizar otras tareas simultáneamente (multitarea).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
