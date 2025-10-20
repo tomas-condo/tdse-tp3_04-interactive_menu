@@ -64,23 +64,42 @@ extern "C" {
  */
 
 /* Events to excite Task Menu */
-typedef enum task_menu_ev {EV_MEN_ENT_IDLE,
-						   EV_MEN_ENT_ACTIVE,
-						   EV_MEN_NEX_IDLE,
-						   EV_MEN_NEX_ACTIVE,
-						   EV_MEN_ESC_IDLE,
-						   EV_MEN_ESC_ACTIVE} task_menu_ev_t;
+// task_menu_attribute.h
+typedef enum {
+    ST_MEN_MAIN,
+    ST_MEN_MENU1,
+    ST_MEN_MENU2,
+    ST_MEN_MENU3
+} task_menu_state_t;
+
+typedef enum task_menu_ev {
+	   EV_MEN_ENT_IDLE,
+	   EV_MEN_ENT_ACTIVE,
+	   EV_MEN_NEX_IDLE,
+	   EV_MEN_NEX_ACTIVE,
+	   EV_MEN_ESC_IDLE,
+	   EV_MEN_ESC_ACTIVE,
+
+	   EV_MEN_ENTER,
+	   EV_MEN_NEXT,
+	   EV_MEN_ESC,
+
+   } task_menu_ev_t;
 
 /* State of Task Menu */
-typedef enum task_menu_st {ST_MEN_XX_IDLE,
-						   ST_MEN_XX_ACTIVE} task_menu_st_t;
+typedef enum task_menu_st {ST_MEN_XX_IDLE, ST_MEN_XX_ACTIVE} task_menu_st_t;
 
 typedef struct
 {
-	uint32_t		tick;
-	task_menu_st_t	state;
-	task_menu_ev_t	event;
-	bool			flag;
+    uint32_t tick;
+    task_menu_state_t state;
+    task_menu_ev_t event;
+    bool flag;
+
+    uint8_t index_menu1;
+    uint8_t index_menu2;
+    uint8_t index_menu3;
+
 } task_menu_dta_t;
 
 /********************** external data declaration ****************************/

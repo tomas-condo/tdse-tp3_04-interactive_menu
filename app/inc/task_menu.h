@@ -44,10 +44,22 @@ extern "C" {
 #endif
 
 /********************** inclusions *******************************************/
-
+#include "task_menu_attribute.h"
 /********************** macros ***********************************************/
 
 /********************** typedef **********************************************/
+/*typedef struct
+{
+    uint32_t tick;
+    task_menu_state_t state;
+    task_menu_ev_t event;
+    bool flag;
+
+    uint8_t index_menu1;
+    uint8_t index_menu2;
+    uint8_t index_menu3;
+
+} task_menu_dta_t;*/
 
 /********************** external data declaration ****************************/
 extern uint32_t g_task_menu_cnt;

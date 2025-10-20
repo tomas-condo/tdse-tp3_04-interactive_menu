@@ -38,6 +38,8 @@
 /********************** inclusions *******************************************/
 /* Project includes */
 #include "main.h"
+#include "math.h"
+#include "stdio.h"
 
 /* Demo includes */
 #include "logger.h"
@@ -48,6 +50,7 @@
 #include "app.h"
 #include "task_menu_attribute.h"
 #include "task_menu_interface.h"
+#include "task_menu.h"         // <-- ¡AÑADIR ESTA LÍNEA!
 #include "display.h"
 
 /********************** macros and definitions *******************************/
@@ -59,13 +62,26 @@
 #define DEL_MEN_XX_MAX				500ul
 
 /********************** internal data declaration ****************************/
+/*task_menu_dta_t task_menu_dta =
+	{DEL_MEN_XX_MIN, ST_MEN_XX_IDLE, EV_MEN_ENT_IDLE, false};*/
+
 task_menu_dta_t task_menu_dta =
-	{DEL_MEN_XX_MIN, ST_MEN_XX_IDLE, EV_MEN_ENT_IDLE, false};
+{
+    /* tick         */ DEL_MEN_XX_MIN,
+    /* state        */ ST_MEN_MAIN,          // Usamos ST_MEN_MAIN como estado inicial
+    /* event        */ EV_MEN_ENT_IDLE,
+    /* flag         */ false,
+
+    // CAMPOS DE ÍNDICE AÑADIDOS
+    /* index_menu1  */ 0,
+    /* index_menu2  */ 0,
+    /* index_menu3  */ 0,
+
+};
 
 #define MENU_DTA_QTY	(sizeof(task_menu_dta)/sizeof(task_menu_dta_t))
 
 /********************** internal functions declaration ***********************/
-void task_menu_statechart(void);
 
 /********************** internal data definition *****************************/
 const char *p_task_menu 		= "Task Menu (Interactive Menu)";
@@ -123,6 +139,156 @@ void task_menu_init(void *parameters)
 	displayStringWrite("Test Nro: ");
 }
 
+void task_menu_statechart(void) {
+    task_menu_dta_t *p_task_menu_dta;
+    /* Update Task Menu Data Pointer */
+    p_task_menu_dta = &task_menu_dta;
+
+    // ---------------------------------------------------------------------
+    // 1. Manejo de Eventos
+    // ---------------------------------------------------------------------
+    if (true == any_event_task_menu()) {
+        p_task_menu_dta -> flag = true;
+        p_task_menu_dta -> event = get_event_task_menu();
+    }
+
+    // ---------------------------------------------------------------------
+    // 2. Máquina de Estados (solo si hay un evento para procesar)
+    // ---------------------------------------------------------------------
+    if (true == p_task_menu_dta -> flag) {
+        switch (p_task_menu_dta -> state) {
+            // =============================================================
+            // ESTADO MAIN
+            // =============================================================
+            case ST_MEN_MAIN:
+                if (p_task_menu_dta -> event == EV_MEN_ENTER) {
+                    // Transición MAIN -> MENU 1
+                    p_task_menu_dta -> state = ST_MEN_MENU1;
+                    p_task_menu_dta -> index_menu1 = 0; //reset
+                }
+                else if (p_task_menu_dta->event == EV_MEN_NEXT || p_task_menu_dta->event == EV_MEN_ESC)
+                    // Transición MAIN -> MAIN
+                    p_task_menu_dta->state = ST_MEN_MAIN;
+                break;
+            // =============================================================
+            // ESTADO MENU 1
+            // =============================================================
+            case ST_MEN_MENU1:
+                if (p_task_menu_dta -> event == EV_MEN_NEXT){
+                    if (p_task_menu_dta -> index_menu1 < 2) // [guard] index_menu1 < 2
+                        // Acción: index_menu1 ++
+                        p_task_menu_dta -> index_menu1++;
+                    else if (p_task_menu_dta->index_menu1 == 2) // [guard] index_menu1 == 2
+                        // Acción: index_menu1 = 0 (Wrap-around)
+                        p_task_menu_dta -> index_menu1 = 0;
+                    // La transición es a MENU 1 en ambos casos
+                    p_task_menu_dta -> state = ST_MEN_MENU1;
+                }
+                else if (p_task_menu_dta -> event == EV_MEN_ESC){
+                    // Transición MENU 1 -> MAIN
+                    p_task_menu_dta -> state = ST_MEN_MAIN;
+                    p_task_menu_dta -> index_menu1 = 0; // Reset
+                }
+                else if (p_task_menu_dta -> event == EV_MEN_ENTER){
+                    // Transición MENU 1 -> MENU 2
+                    p_task_menu_dta -> state = ST_MEN_MENU2;
+                    p_task_menu_dta -> index_menu2 = 0; // Entramos a MENU 2, iniciamos su índice
+                }
+                break;
+
+            // =============================================================
+            // ESTADO MENU 2
+            // =============================================================
+
+            case ST_MEN_MENU2:
+                if (p_task_menu_dta -> event == EV_MEN_NEXT)
+                {
+                    if (p_task_menu_dta -> index_menu2 < 3) // [guard] index_menu2 < 3
+                        // Acción: index_menu2 ++
+                        p_task_menu_dta -> index_menu2++;
+                    else if (p_task_menu_dta -> index_menu2 == 3) // [guard] index_menu2 == 3
+                        // Acción: index_menu2 = 0 (Wrap-around)
+                        p_task_menu_dta -> index_menu2 = 0;
+                    // La transición es a MENU 2 en ambos casos
+                    p_task_menu_dta -> state = ST_MEN_MENU2;
+                }
+                else if (p_task_menu_dta -> event == EV_MEN_ESC) {
+                    // Transición MENU 2 -> MENU 1
+                    p_task_menu_dta -> state = ST_MEN_MENU1;
+                    p_task_menu_dta->index_menu1 = 0;
+                }
+                else if (p_task_menu_dta->event == EV_MEN_ENTER) {
+                    // Transición MENU 2 -> MENU 3
+                    p_task_menu_dta->state = ST_MEN_MENU3;
+                    p_task_menu_dta->index_menu3 = 0; // Entramos a MENU 3, iniciamos su índice
+                }
+                break;
+
+            // =============================================================
+            // ESTADO MENU 3
+            // =============================================================
+
+            case ST_MEN_MENU3:
+                if (p_task_menu_dta->event == EV_MEN_NEXT){
+                    if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 < 10))
+                        // Transición MENU 3 -> MENU 3
+                        p_task_menu_dta->index_menu3++; // Acción: index_menu3++
+                    else if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 == 10))
+                    {
+                        // Acción: Ninguna (si el wrap-around es 0, va index_menu3 = 0.
+                        // Según la tabla, la acción está VACÍA, sigue en 10).
+                    }
+                    // NOTA: Las últimas dos guardas (index_menu3 < 2 y index_menu3 == 2) no tienen acciones y son redundantes con la lógica de menú2.
+
+                    p_task_menu_dta -> state = ST_MEN_MENU3;
+                }
+                else if (p_task_menu_dta->event == EV_MEN_ESC) {
+                    // Transición MENU 3 -> MENU 2
+                    p_task_menu_dta->state = ST_MEN_MENU2;
+                    p_task_menu_dta->index_menu2 = 0;
+                }
+                else if (p_task_menu_dta->event == EV_MEN_ENTER)
+                {
+                    // Transición MENU 3 -> MENU 3 (No hay acción)
+                    p_task_menu_dta->state = ST_MEN_MENU3;
+                }
+                break;
+
+            default:
+                p_task_menu_dta->state = ST_MEN_MAIN;
+                break;
+        }
+
+        p_task_menu_dta->flag = false;
+    }
+    // ---------------------------------------------------------------------
+    // 3. Lógica de Display (para actualizar el LCD)
+    // ---------------------------------------------------------------------
+
+    switch (p_task_menu_dta->state)
+    {
+        case ST_MEN_MAIN:
+            // Llama a la función de display para el estado principal
+            // lcd_print_menu_main();
+            break;
+
+        case ST_MEN_MENU1:
+            // Llama a la función de display pasando el índice actual
+            // lcd_print_menu1(p_task_menu_dta->index_menu1);
+            break;
+
+        case ST_MEN_MENU2:
+            // Llama a la función de display pasando el índice actual
+            // lcd_print_menu2(p_task_menu_dta->index_menu2);
+            break;
+
+        case ST_MEN_MENU3:
+            // Llama a la función de display pasando los índices relevantes
+            // lcd_print_menu3(p_task_menu_dta->index_menu2, p_task_menu_dta->index_menu3);
+            break;
+    }
+}
+
 void task_menu_update(void *parameters)
 {
 	bool b_time_update_required = false;
@@ -158,67 +324,6 @@ void task_menu_update(void *parameters)
 			b_time_update_required = false;
 		}
 		__asm("CPSIE i");	/* enable interrupts */
-	}
-}
-
-void task_menu_statechart(void)
-{
-	task_menu_dta_t *p_task_menu_dta;
-	char menu_str[8];
-
-    /* Update Task Menu Data Pointer */
-	p_task_menu_dta = &task_menu_dta;
-
-	if (true == any_event_task_menu())
-	{
-		p_task_menu_dta->flag = true;
-		p_task_menu_dta->event = get_event_task_menu();
-	}
-
-	switch (p_task_menu_dta->state)
-	{
-		case ST_MEN_XX_IDLE:
-
-			if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_ACTIVE == p_task_menu_dta->event))
-			{
-				p_task_menu_dta->tick = DEL_MEN_XX_MAX;
-				p_task_menu_dta->flag = false;
-				p_task_menu_dta->state = ST_MEN_XX_ACTIVE;
-			}
-
-			break;
-
-		case ST_MEN_XX_ACTIVE:
-
-			if ((true == p_task_menu_dta->flag) && (EV_MEN_ENT_IDLE == p_task_menu_dta->event))
-			{
-				p_task_menu_dta->flag = false;
-				p_task_menu_dta->state = ST_MEN_XX_IDLE;
-			}
-			else
-			{
-				p_task_menu_dta->tick--;
-				if (DEL_MEN_XX_MIN == p_task_menu_dta->tick)
-				{
-					p_task_menu_dta->tick = DEL_MEN_XX_MAX;
-
-					/* Print out: LCD Display */
-					snprintf(menu_str, sizeof(menu_str), "%lu", (g_task_menu_cnt/1000ul));
-					displayCharPositionWrite(10, 1);
-					displayStringWrite(menu_str);
-				}
-			}
-
-			break;
-
-		default:
-
-			p_task_menu_dta->tick  = DEL_MEN_XX_MIN;
-			p_task_menu_dta->state = ST_MEN_XX_IDLE;
-			p_task_menu_dta->event = EV_MEN_ENT_IDLE;
-			p_task_menu_dta->flag  = false;
-
-			break;
 	}
 }
 
