@@ -1,5 +1,18 @@
-  app.c (app.h)
-   Endless loops, which execute tasks with fixed computing time. This 
-   sequential execution is only deviated from when an interrupt event occurs.
+Evolucion de g_app_runtime_us
 
-...
+Al iniciar cada ciclo de actualización de la aplicación, g_app_runtime_us se reinicia. Luego, se ejecutan todas las tareas.
+Para cada tarea se mide el tiempo de ejecución real en microsegundos usando el DWT cycle counter.
+Ese tiempo se acumula en g_app_runtime_us.
+Al terminar el ciclo, g_app_runtime_us contiene el tiempo total de CPU consumido por todas las tareas en esa iteración.
+En el siguiente ciclo de app_update(), el proceso se repite: se reinicia y vuelve a calcularse.
+Comienza en Value = 0 y termina en Value = 20. 
+
+Evolucion WCET
+
+El WCET de cada tarea se pone en cero.
+Si ese tiempo supera al WCET guardado, se actualiza y si es mayor o igual, el WCET no cambia.
+Cada WCET (de task_tda_list[x]) comienza en 0.
+- WCET del [0] cambia a 4
+- WCET del [1] cambia a 4
+- WCET del [2] cambia a 12
+
