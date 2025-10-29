@@ -73,16 +73,17 @@ typedef enum {
 } task_menu_state_t;
 
 typedef enum task_menu_ev {
-	   EV_MEN_ENT_IDLE,
+	   /*EV_MEN_ENT_IDLE,
 	   EV_MEN_ENT_ACTIVE,
 	   EV_MEN_NEX_IDLE,
 	   EV_MEN_NEX_ACTIVE,
 	   EV_MEN_ESC_IDLE,
-	   EV_MEN_ESC_ACTIVE,
+	   EV_MEN_ESC_ACTIVE,*/
 
 	   EV_MEN_ENTER,
 	   EV_MEN_NEXT,
 	   EV_MEN_ESC,
+	   EV_MEN_IDLE
 
    } task_menu_ev_t;
 

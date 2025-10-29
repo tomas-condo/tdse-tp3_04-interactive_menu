@@ -69,7 +69,7 @@ task_menu_dta_t task_menu_dta =
 {
     /* tick         */ DEL_MEN_XX_MIN,
     /* state        */ ST_MEN_MAIN,          // Usamos ST_MEN_MAIN como estado inicial
-    /* event        */ EV_MEN_ENT_IDLE,
+    /* event        */ EV_MEN_IDLE,
     /* flag         */ false,
 
     // CAMPOS DE ÍNDICE AÑADIDOS
@@ -117,7 +117,7 @@ void task_menu_init(void *parameters)
 	state = ST_MEN_XX_IDLE;
 	p_task_menu_dta->state = state;
 
-	event = EV_MEN_ENT_IDLE;
+	event = EV_MEN_IDLE;
 	p_task_menu_dta->event = event;
 
 	b_event = false;
@@ -163,6 +163,15 @@ void task_menu_statechart(void) {
             case ST_MEN_MAIN:
                 if (p_task_menu_dta -> event == EV_MEN_ENTER) {
                     // Transición MAIN -> MENU 1
+                	displayCharPositionWrite(0, 0);
+					displayStringWrite("Bienvenido al Menu 1");
+					for(int i = 1; i < 4; i++){
+						displayCharPositionWrite(0, i);
+						displayStringWrite("                    ");
+					};
+					displayCharPositionWrite(0, 2);
+					displayStringWrite(">Motor 1     Motor 2");
+                    p_task_menu_dta -> flag = false;
                     p_task_menu_dta -> state = ST_MEN_MENU1;
                     p_task_menu_dta -> index_menu1 = 0; //reset
                 }
@@ -175,12 +184,18 @@ void task_menu_statechart(void) {
             // =============================================================
             case ST_MEN_MENU1:
                 if (p_task_menu_dta -> event == EV_MEN_NEXT){
-                    if (p_task_menu_dta -> index_menu1 < 2) // [guard] index_menu1 < 2
+                    if (p_task_menu_dta -> index_menu1 < 1){ // [guard] index_menu1 < 2
                         // Acción: index_menu1 ++
+                    	displayCharPositionWrite(0, 2);
+                    	displayStringWrite(" Motor 1    >Motor 2");
                         p_task_menu_dta -> index_menu1++;
-                    else if (p_task_menu_dta->index_menu1 == 2) // [guard] index_menu1 == 2
+                    }
+                    else if (p_task_menu_dta->index_menu1 == 1){ // [guard] index_menu1 == 2
                         // Acción: index_menu1 = 0 (Wrap-around)
                         p_task_menu_dta -> index_menu1 = 0;
+                        displayCharPositionWrite(0, 2);
+                        displayStringWrite(">Motor 1     Motor 2");
+                    }
                     // La transición es a MENU 1 en ambos casos
                     p_task_menu_dta -> state = ST_MEN_MENU1;
                 }
@@ -191,6 +206,12 @@ void task_menu_statechart(void) {
                 }
                 else if (p_task_menu_dta -> event == EV_MEN_ENTER){
                     // Transición MENU 1 -> MENU 2
+                	displayCharPositionWrite(0, 0);
+                	displayStringWrite("Bienvenido al Menu 2");
+                	displayCharPositionWrite(0, 2);
+                	displayStringWrite(">Power  Speed  Spin ");
+
+                	p_task_menu_dta -> flag = false;
                     p_task_menu_dta -> state = ST_MEN_MENU2;
                     p_task_menu_dta -> index_menu2 = 0; // Entramos a MENU 2, iniciamos su índice
                 }
@@ -203,24 +224,55 @@ void task_menu_statechart(void) {
             case ST_MEN_MENU2:
                 if (p_task_menu_dta -> event == EV_MEN_NEXT)
                 {
-                    if (p_task_menu_dta -> index_menu2 < 3) // [guard] index_menu2 < 3
+                    if (p_task_menu_dta -> index_menu2 == 0){ // [guard] index_menu2 < 3
                         // Acción: index_menu2 ++
+                    	displayCharPositionWrite(0, 2);
+                    	displayStringWrite(" Power >Speed  Spin ");
                         p_task_menu_dta -> index_menu2++;
-                    else if (p_task_menu_dta -> index_menu2 == 3) // [guard] index_menu2 == 3
+                    }
+                    else if (p_task_menu_dta -> index_menu2 == 1){ // [guard] index_menu2 < 3
+						// Acción: index_menu2 ++
+                        displayCharPositionWrite(0, 2);
+                        displayStringWrite(" Power  Speed >Spin");
+
+						p_task_menu_dta -> index_menu2++;
+					}
+                    else if (p_task_menu_dta -> index_menu2 == 2){ // [guard] index_menu2 == 3
                         // Acción: index_menu2 = 0 (Wrap-around)
+                        displayCharPositionWrite(0, 2);
+                        displayStringWrite(">Power  Speed  Spin ");
                         p_task_menu_dta -> index_menu2 = 0;
+                    }
                     // La transición es a MENU 2 en ambos casos
                     p_task_menu_dta -> state = ST_MEN_MENU2;
                 }
                 else if (p_task_menu_dta -> event == EV_MEN_ESC) {
                     // Transición MENU 2 -> MENU 1
+					displayCharPositionWrite(0, 2);
+					displayStringWrite(">Motor 1     Motor 2");
                     p_task_menu_dta -> state = ST_MEN_MENU1;
                     p_task_menu_dta->index_menu1 = 0;
                 }
                 else if (p_task_menu_dta->event == EV_MEN_ENTER) {
                     // Transición MENU 2 -> MENU 3
+                	displayCharPositionWrite(0, 0);
+					displayStringWrite("Bienvenido al Menu 3");
+
+                	p_task_menu_dta -> flag = false;
                     p_task_menu_dta->state = ST_MEN_MENU3;
                     p_task_menu_dta->index_menu3 = 0; // Entramos a MENU 3, iniciamos su índice
+                    if (p_task_menu_dta -> index_menu2 == 0){
+                    	displayCharPositionWrite(0, 2);
+                    	displayStringWrite(">ON             OFF");
+                    }
+                    else if (p_task_menu_dta -> index_menu2 == 1){
+                    	displayCharPositionWrite(0, 2);
+                    	displayStringWrite(">0 1 2 3 4 5 6 7 8 9");
+                    }
+                    else if (p_task_menu_dta -> index_menu2 == 2){
+                    	displayCharPositionWrite(0, 2);
+                    	displayStringWrite(">LEFT          RIGHT");
+                    }
                 }
                 break;
 
@@ -229,12 +281,63 @@ void task_menu_statechart(void) {
             // =============================================================
 
             case ST_MEN_MENU3:
+            	if (p_task_menu_dta -> index_menu2 == 0){
+            		if (p_task_menu_dta->event == EV_MEN_NEXT){
+            			if(p_task_menu_dta -> index_menu3 == 0){
+							p_task_menu_dta->index_menu3++; // Acción: index_menu3++
+							displayCharPositionWrite(0, 2);
+							displayStringWrite(" ON            >OFF");
+            			}
+            			else if(p_task_menu_dta -> index_menu3 == 1){
+							p_task_menu_dta->index_menu3--; // Acción: index_menu3--
+							displayCharPositionWrite(0, 2);
+							displayStringWrite(">ON             OFF");
+            			}
+            		}
+            		//power -> enter (cami dice: no me acuerdo xq escribimos esto con f)
+
+				}
+				else if (p_task_menu_dta -> index_menu2 == 1){
+					if (p_task_menu_dta->event == EV_MEN_NEXT){
+						if(p_task_menu_dta -> index_menu3 == 0){
+							p_task_menu_dta->index_menu3++; // Acción: index_menu3++
+							displayCharPositionWrite(0, 2);
+							displayStringWrite(">0 1 2 3 4 5 6 7 8 9"); //agregar cada > a cada numero
+						}
+					}
+				}
+				else if (p_task_menu_dta -> index_menu2 == 2){
+					if (p_task_menu_dta->event == EV_MEN_NEXT){
+						if(p_task_menu_dta -> index_menu3 == 0){
+							p_task_menu_dta->index_menu3++; // Acción: index_menu3++
+							displayCharPositionWrite(0, 2);
+							displayStringWrite(" LEFT         >RIGHT");
+						}
+						else if(p_task_menu_dta -> index_menu3 == 1){
+							p_task_menu_dta->index_menu3--; // Acción: index_menu3--
+							displayCharPositionWrite(0, 2);
+							displayStringWrite(">LEFT          RIGHT");
+						}
+					}
+				}
+
+
+
+
+
                 if (p_task_menu_dta->event == EV_MEN_NEXT){
-                    if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 < 10))
+                	if ((p_task_menu_dta->index_menu2 == 0) && (p_task_menu_dta->index_menu3 < 3)){
+
+                	}
+                    else if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 < 10)){
                         // Transición MENU 3 -> MENU 3
                         p_task_menu_dta->index_menu3++; // Acción: index_menu3++
-                    else if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 == 10))
-                    {
+                		for(int i = 0; i < 20; i++){
+							displayCharPositionWrite(i, 2);
+							displayStringWrite("%d0 1 2 3 4 5 6 7 8 9");
+						}
+					}
+                    else if ((p_task_menu_dta->index_menu2 == 1) && (p_task_menu_dta->index_menu3 == 10)){
                         // Acción: Ninguna (si el wrap-around es 0, va index_menu3 = 0.
                         // Según la tabla, la acción está VACÍA, sigue en 10).
                     }
@@ -250,6 +353,13 @@ void task_menu_statechart(void) {
                 else if (p_task_menu_dta->event == EV_MEN_ENTER)
                 {
                     // Transición MENU 3 -> MENU 3 (No hay acción)
+                	displayCharPositionWrite(0, 0);
+					displayStringWrite("Seguimos en Menu 3  ");
+					for(int i = 1; i < 4; i++){
+						displayCharPositionWrite(0, i);
+						displayStringWrite("                    ");
+					};
+                	p_task_menu_dta -> flag = false;
                     p_task_menu_dta->state = ST_MEN_MENU3;
                 }
                 break;
@@ -265,28 +375,6 @@ void task_menu_statechart(void) {
     // 3. Lógica de Display (para actualizar el LCD)
     // ---------------------------------------------------------------------
 
-    switch (p_task_menu_dta->state)
-    {
-        case ST_MEN_MAIN:
-            // Llama a la función de display para el estado principal
-            // lcd_print_menu_main();
-            break;
-
-        case ST_MEN_MENU1:
-            // Llama a la función de display pasando el índice actual
-            // lcd_print_menu1(p_task_menu_dta->index_menu1);
-            break;
-
-        case ST_MEN_MENU2:
-            // Llama a la función de display pasando el índice actual
-            // lcd_print_menu2(p_task_menu_dta->index_menu2);
-            break;
-
-        case ST_MEN_MENU3:
-            // Llama a la función de display pasando los índices relevantes
-            // lcd_print_menu3(p_task_menu_dta->index_menu2, p_task_menu_dta->index_menu3);
-            break;
-    }
 }
 
 void task_menu_update(void *parameters)
